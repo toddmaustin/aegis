@@ -12,6 +12,9 @@
 #include <tmmintrin.h>
 #include <type_traits>
 
+typedef __int128 int128_t;
+typedef unsigned __int128 uint128_t;
+
 namespace aegis {
 
 // --- Global Ephemeral Key and Key Schedule ---
@@ -88,62 +91,57 @@ static void init_ephemeral_key() {
 
 // AES-128 encryption: iterate forward over ephemeral_enc_keys.
 static inline __m128i
-AES_128_Enc_Block(__m128i block)
+AES_128_Enc_Block(uint64_t value)
 {
-#ifdef notdef
-    init_ephemeral_key();
-    block = _mm_xor_si128(block, ephemeral_enc_keys[0]);
-    for (int i = 1; i < 10; i++) {
-        block = _mm_aesenc_si128(block, ephemeral_enc_keys[i]);
-    }
-    block = _mm_aesenclast_si128(block, ephemeral_enc_keys[10]);
-    return block;
-#else /* !notdef */
-    init_ephemeral_key();
+  init_ephemeral_key();
 
-    // Global register variables for keys 0-9.
-    // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
-    // volatile register __m128i g_temp  asm("xmm4");
-    volatile register __m128i g_key0  asm("xmm5");
-    volatile register __m128i g_key1  asm("xmm6");
-    volatile register __m128i g_key2  asm("xmm7");
-    volatile register __m128i g_key3  asm("xmm8");
-    volatile register __m128i g_key4  asm("xmm9");
-    volatile register __m128i g_key5  asm("xmm10");
-    volatile register __m128i g_key6  asm("xmm11");
-    volatile register __m128i g_key7  asm("xmm12");
-    volatile register __m128i g_key8  asm("xmm13");
-    volatile register __m128i g_key9  asm("xmm14");
-    volatile register __m128i g_key10 asm("xmm15");
+  register __m128i block asm("xmm0")
+     = _mm_set_epi32(/* hash */42, /* salt */0,
+                     static_cast<int>(value >> 32),
+                     static_cast<int>(value & 0xffffffff));
 
-    __asm__ volatile (
-        "pxor   %1, %0            \n\t"  // block ^= g_key0
-        "aesenc %2, %0            \n\t"  // round 1: use g_key1
-        "aesenc %3, %0            \n\t"  // round 2: use g_key2
-        "aesenc %4, %0            \n\t"  // round 3: use g_key3
-        "aesenc %5, %0            \n\t"  // round 4: use g_key4
-        "aesenc %6, %0            \n\t"  // round 5: use g_key5
-        "aesenc %7, %0            \n\t"  // round 6: use g_key6
-        "aesenc %8, %0            \n\t"  // round 7: use g_key7
-        "aesenc %9, %0            \n\t"  // round 8: use g_key8
-        "aesenc %10, %0           \n\t"  // round 9: use g_key9
-        "aesenclast %11, %0       \n\t"  // final round with ephemeral_enc_keys[10]
-        : "+x" (block)
-        : "x"(g_key0),
-          "x"(g_key1),
-          "x"(g_key2),
-          "x"(g_key3),
-          "x"(g_key4),
-          "x"(g_key5),
-          "x"(g_key6),
-          "x"(g_key7),
-          "x"(g_key8),
-          "x"(g_key9),
-          "x"(g_key10)
-    );
 
-    return block;
-#endif /* notdef */
+  // Global register variables for keys 0-9.
+  // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
+  // volatile register __m128i g_temp  asm("xmm4");
+  volatile register __m128i g_key0  asm("xmm5");
+  volatile register __m128i g_key1  asm("xmm6");
+  volatile register __m128i g_key2  asm("xmm7");
+  volatile register __m128i g_key3  asm("xmm8");
+  volatile register __m128i g_key4  asm("xmm9");
+  volatile register __m128i g_key5  asm("xmm10");
+  volatile register __m128i g_key6  asm("xmm11");
+  volatile register __m128i g_key7  asm("xmm12");
+  volatile register __m128i g_key8  asm("xmm13");
+  volatile register __m128i g_key9  asm("xmm14");
+  volatile register __m128i g_key10 asm("xmm15");
+
+  __asm__ volatile (
+      "pxor   %1, %0            \n\t"  // block ^= g_key0
+      "aesenc %2, %0            \n\t"  // round 1: use g_key1
+      "aesenc %3, %0            \n\t"  // round 2: use g_key2
+      "aesenc %4, %0            \n\t"  // round 3: use g_key3
+      "aesenc %5, %0            \n\t"  // round 4: use g_key4
+      "aesenc %6, %0            \n\t"  // round 5: use g_key5
+      "aesenc %7, %0            \n\t"  // round 6: use g_key6
+      "aesenc %8, %0            \n\t"  // round 7: use g_key7
+      "aesenc %9, %0            \n\t"  // round 8: use g_key8
+      "aesenc %10, %0           \n\t"  // round 9: use g_key9
+      "aesenclast %11, %0       \n\t"  // final round with ephemeral_enc_keys[10]
+      : "+x" (block)
+      : "x"(g_key0),
+        "x"(g_key1),
+        "x"(g_key2),
+        "x"(g_key3),
+        "x"(g_key4),
+        "x"(g_key5),
+        "x"(g_key6),
+        "x"(g_key7),
+        "x"(g_key8),
+        "x"(g_key9),
+        "x"(g_key10)
+  );
+  return block;
 }
 
 // AES-128 decryption: iterate in reverse order, applying inverse MixColumns on intermediate keys.
@@ -220,17 +218,11 @@ AES_128_Dec_Block(__m128i block)
 // PlainState embeds a union to pad the value to 64 bits. The plaintext state (padded value, salt, hash)
 // is packed into a 128-bit block and encrypted using AES-128. Every operation (construction, assignment,
 // cast, arithmetic, etc.) generates a new random salt.
-template<typename T>
 class EncInt {
-    static_assert(std::is_integral<T>::value, "EncInt requires an integral type");
-    static_assert(sizeof(T) <= sizeof(uint64_t), "EncInt supports types up to 64 bits");
 private:
     // PlainState embeds a union directly.
     struct PlainState {
-        union {
-            uint64_t pad;
-            T val;
-        } value;
+        uint64_t value;
         uint32_t salt;
         uint32_t hash;
     };
@@ -251,29 +243,26 @@ private:
 
     // Encrypt the PlainState into encrypted_state.
     void encState(const PlainState &ps) {
-        __m128i plain = _mm_set_epi32(ps.hash, ps.salt,
-                                        static_cast<int>(ps.value.pad >> 32),
-                                        static_cast<int>(ps.value.pad & 0xffffffff));
-        encrypted_state = AES_128_Enc_Block(plain);
+        // __m128i plain = _mm_set_epi32(ps.hash, ps.salt, static_cast<int>(ps.value >> 32), static_cast<int>(ps.value & 0xffffffff));
+        encrypted_state = AES_128_Enc_Block(ps.value);
     }
 
     // Decrypt the encrypted_state and return the PlainState.
-__attribute__((target("function_return=rax")));    PlainState decState() const {
+    PlainState decState() const {
         __m128i plain = AES_128_Dec_Block(encrypted_state);
         PlainState ps;
         uint32_t low = _mm_extract_epi32(plain, 0);
         uint32_t high = _mm_extract_epi32(plain, 1);
         // ps.hash = _mm_extract_epi32(plain, 2);
         // ps.salt = _mm_extract_epi32(plain, 3);
-        ps.value.pad = (static_cast<uint64_t>(high) << 32) | low;
+        ps.value = (static_cast<uint64_t>(high) << 32) | low;
         return ps;
     }
 
     // Update the state with a new value: generate new salt and compute new hash.
-    void updState(T newVal) {
+    void updState(uint64_t newVal) {
         PlainState ps;
-        ps.value.pad = 0;
-        ps.value.val = newVal;
+        ps.value = newVal;
         // ps.salt = static_cast<uint32_t>(rand());
         // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
@@ -283,16 +272,14 @@ public:
     // Constructors.
     EncInt() {
         PlainState ps;
-        ps.value.pad = 0;
-        ps.value.val = 0;
+        ps.value = 0;
         // ps.salt = static_cast<uint32_t>(rand());
         // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
     }
-    EncInt(T v) {
+    EncInt(uint64_t v) {
         PlainState ps;
-        ps.value.pad = 0;
-        ps.value.val = v;
+        ps.value = v;
         // ps.salt = static_cast<uint32_t>(rand());
         // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
@@ -301,8 +288,7 @@ public:
     // Deterministic constructor.
     EncInt(T v, uint32_t s) {
         PlainState ps;
-        ps.value.pad = 0;
-        ps.value.val = v;
+        ps.value = v;
         // ps.salt = s;
         // ps.hash = computeHash(ps.value.pad, s);
         encState(ps);
@@ -326,6 +312,7 @@ public:
         return *this;
     }
 
+#if 0
     // Templated conversion constructor.
     template<typename U, typename = typename std::enable_if<std::is_integral<U>::value &&
                                                                std::is_convertible<U, T>::value>::type>
@@ -352,11 +339,12 @@ public:
         encState(ps);
         return *this;
     }
+#endif
 
     // Getters.
-    T getValue() {
+    uint64_t getValue() {
         PlainState ps = decState();
-        return ps.value.val;
+        return ps.value;
     }
     uint32_t getSalt() {
         return decState().salt;
@@ -369,50 +357,51 @@ public:
     EncInt operator+(const EncInt &other) const {
         PlainState ps1 = decState();
         PlainState ps2 = other.decState();
-        return EncInt(ps1.value.val + ps2.value.val);
+        return EncInt(ps1.value + ps2.value);
     }
     EncInt operator-(const EncInt &other) const {
         PlainState ps1 = decState();
         PlainState ps2 = other.decState();
-        return EncInt(ps1.value.val - ps2.value.val);
+        return EncInt(ps1.value - ps2.value);
     }
     EncInt operator*(const EncInt &other) const {
         PlainState ps1 = decState();
         PlainState ps2 = other.decState();
-        return EncInt(ps1.value.val * ps2.value.val);
+        return EncInt(ps1.value * ps2.value);
     }
     EncInt operator/(const EncInt &other) const {
         PlainState ps1 = decState();
         PlainState ps2 = other.decState();
-        return EncInt(ps1.value.val / ps2.value.val);
+        return EncInt(ps1.value / ps2.value);
     }
     EncInt operator%(const EncInt &other) const {
         PlainState ps1 = decState();
         PlainState ps2 = other.decState();
-        return EncInt(ps1.value.val % ps2.value.val);
+        return EncInt(ps1.value % ps2.value);
     }
 
     // Compound assignment operator example.
     EncInt &operator+=(const EncInt &other) {
         PlainState ps1 = decState();
         PlainState ps2 = other.decState();
-        updState(ps1.value.val + ps2.value.val);
+        updState(ps1.value + ps2.value);
         return *this;
     }
 
     // Explicit conversion operator to underlying type.
-    explicit operator T() {
+    explicit operator uint64_t() {
         return getValue();
     }
 
     // For demonstration: friend operator<<.
     friend std::ostream &operator<<(std::ostream &os, const EncInt &ei) {
         PlainState ps = ei.decState();
-        os << ps.value.val;
+        os << ps.value;
         return os;
     }
 };
 
+#if 0
 // Convenience alias template.
 template<typename T>
 using EncInt_t = EncInt<T>;
@@ -426,6 +415,7 @@ using enc_int32_t  = EncInt_t<int32_t>;
 using enc_uint32_t = EncInt_t<uint32_t>;
 using enc_int64_t  = EncInt_t<int64_t>;
 using enc_uint64_t = EncInt_t<uint64_t>;
+#endif
 
 } // namespace aegis
 
