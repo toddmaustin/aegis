@@ -1,3 +1,5 @@
+test_aegis
+
 # Prerequisites
 *.d
 
@@ -30,3 +32,6 @@
 *.exe
 *.out
 *.app
+
+# Misc
+*.swp

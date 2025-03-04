@@ -54,12 +54,41 @@ static void init_ephemeral_key() {
         ephemeral_enc_keys[9] = AES128_KEY_EXPANSION_STEP(ephemeral_enc_keys[8], 0x1B);
         ephemeral_enc_keys[10] = AES128_KEY_EXPANSION_STEP(ephemeral_enc_keys[9], 0x36);
 
+        // Global register variables for keys 0-9.
+        // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
+        // volatile register __m128i g_temp  asm("xmm4");
+        volatile register __m128i g_key0  asm("xmm5");
+        volatile register __m128i g_key1  asm("xmm6");
+        volatile register __m128i g_key2  asm("xmm7");
+        volatile register __m128i g_key3  asm("xmm8");
+        volatile register __m128i g_key4  asm("xmm9");
+        volatile register __m128i g_key5  asm("xmm10");
+        volatile register __m128i g_key6  asm("xmm11");
+        volatile register __m128i g_key7  asm("xmm12");
+        volatile register __m128i g_key8  asm("xmm13");
+        volatile register __m128i g_key9  asm("xmm14");
+        volatile register __m128i g_key10 asm("xmm15");
+
+        // Bind the first 10 keys to XMM registers.
+        g_key0 = ephemeral_enc_keys[0];
+        g_key1 = ephemeral_enc_keys[1];
+        g_key2 = ephemeral_enc_keys[2];
+        g_key3 = ephemeral_enc_keys[3];
+        g_key4 = ephemeral_enc_keys[4];
+        g_key5 = ephemeral_enc_keys[5];
+        g_key6 = ephemeral_enc_keys[6];
+        g_key7 = ephemeral_enc_keys[7];
+        g_key8 = ephemeral_enc_keys[8];
+        g_key9 = ephemeral_enc_keys[9];
+        g_key10 = ephemeral_enc_keys[10];
+
         ephemeral_key_initialized = true;
     }
 }
 
 // AES-128 encryption: iterate forward over ephemeral_enc_keys.
 static inline __m128i AES_128_Enc_Block(__m128i block) {
+#ifdef notdef
     init_ephemeral_key();
     block = _mm_xor_si128(block, ephemeral_enc_keys[0]);
     for (int i = 1; i < 10; i++) {
@@ -67,10 +96,56 @@ static inline __m128i AES_128_Enc_Block(__m128i block) {
     }
     block = _mm_aesenclast_si128(block, ephemeral_enc_keys[10]);
     return block;
+#else /* !notdef */
+    init_ephemeral_key();
+
+    // Global register variables for keys 0-9.
+    // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
+    // volatile register __m128i g_temp  asm("xmm4");
+    volatile register __m128i g_key0  asm("xmm5");
+    volatile register __m128i g_key1  asm("xmm6");
+    volatile register __m128i g_key2  asm("xmm7");
+    volatile register __m128i g_key3  asm("xmm8");
+    volatile register __m128i g_key4  asm("xmm9");
+    volatile register __m128i g_key5  asm("xmm10");
+    volatile register __m128i g_key6  asm("xmm11");
+    volatile register __m128i g_key7  asm("xmm12");
+    volatile register __m128i g_key8  asm("xmm13");
+    volatile register __m128i g_key9  asm("xmm14");
+    volatile register __m128i g_key10 asm("xmm15");
+
+    __asm__ volatile (
+        "pxor   %1, %0            \n\t"  // block ^= g_key0
+        "aesenc %2, %0            \n\t"  // round 1: use g_key1
+        "aesenc %3, %0            \n\t"  // round 2: use g_key2
+        "aesenc %4, %0            \n\t"  // round 3: use g_key3
+        "aesenc %5, %0            \n\t"  // round 4: use g_key4
+        "aesenc %6, %0            \n\t"  // round 5: use g_key5
+        "aesenc %7, %0            \n\t"  // round 6: use g_key6
+        "aesenc %8, %0            \n\t"  // round 7: use g_key7
+        "aesenc %9, %0            \n\t"  // round 8: use g_key8
+        "aesenc %10, %0           \n\t"  // round 9: use g_key9
+        "aesenclast %11, %0       \n\t"  // final round with ephemeral_enc_keys[10]
+        : "+x" (block)
+        : "x"(g_key0),
+          "x"(g_key1),
+          "x"(g_key2),
+          "x"(g_key3),
+          "x"(g_key4),
+          "x"(g_key5),
+          "x"(g_key6),
+          "x"(g_key7),
+          "x"(g_key8),
+          "x"(g_key9),
+          "x"(g_key10)
+    );
+    return block;
+#endif /* notdef */
 }
 
 // AES-128 decryption: iterate in reverse order, applying inverse MixColumns on intermediate keys.
 static inline __m128i AES_128_Dec_Block(__m128i block) {
+#ifdef notdef
     init_ephemeral_key();
     block = _mm_xor_si128(block, ephemeral_enc_keys[10]);
     for (int i = 9; i >= 1; i--) {
@@ -78,6 +153,60 @@ static inline __m128i AES_128_Dec_Block(__m128i block) {
     }
     block = _mm_aesdeclast_si128(block, ephemeral_enc_keys[0]);
     return block;
+#else /* !notdef */
+    init_ephemeral_key();
+
+    // Global register variables for keys 0-9.
+    // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
+    register __m128i g_temp  asm("xmm4");
+    register __m128i g_key0  asm("xmm5");
+    register __m128i g_key1  asm("xmm6");
+    register __m128i g_key2  asm("xmm7");
+    register __m128i g_key3  asm("xmm8");
+    register __m128i g_key4  asm("xmm9");
+    register __m128i g_key5  asm("xmm10");
+    register __m128i g_key6  asm("xmm11");
+    register __m128i g_key7  asm("xmm12");
+    register __m128i g_key8  asm("xmm13");
+    register __m128i g_key9  asm("xmm14");
+    register __m128i g_key10 asm("xmm15");
+
+    __asm__ volatile (
+        "pxor   %1, %0            \n\t"  // block ^= ephemeral_enc_keys[10]
+        "aesimc %2, %3            \n\t"
+        "aesdec %3, %0            \n\t"  // round 1: using inverse of g_key9
+        "aesimc %4, %5            \n\t"
+        "aesdec %5, %0            \n\t"  // round 2: using inverse of g_key8
+        "aesimc %6, %7            \n\t"
+        "aesdec %7, %0            \n\t"  // round 3: using inverse of g_key7
+        "aesimc %8, %9            \n\t"
+        "aesdec %9, %0            \n\t"  // round 4: using inverse of g_key6
+        "aesimc %10, %11          \n\t"
+        "aesdec %11, %0           \n\t"  // round 5: using inverse of g_key5
+        "aesimc %12, %13          \n\t"
+        "aesdec %13, %0           \n\t"  // round 6: using inverse of g_key4
+        "aesimc %14, %15          \n\t"
+        "aesdec %15, %0           \n\t"  // round 7: using inverse of g_key3
+        "aesimc %16, %17          \n\t"
+        "aesdec %17, %0           \n\t"  // round 8: using inverse of g_key2
+        "aesimc %18, %19          \n\t"
+        "aesdec %19, %0           \n\t"  // round 9: using inverse of g_key1
+        "aesdeclast %20, %0       \n\t"  // final round with g_key0
+        : "+x" (block)
+        : "x"(g_key10),
+          "x"(g_key9), "x"(g_temp),
+          "x"(g_key8), "x"(g_temp),
+          "x"(g_key7), "x"(g_temp),
+          "x"(g_key6), "x"(g_temp),
+          "x"(g_key5), "x"(g_temp),
+          "x"(g_key4), "x"(g_temp),
+          "x"(g_key3), "x"(g_temp),
+          "x"(g_key2), "x"(g_temp),
+          "x"(g_key1), "x"(g_temp),
+          "x"(g_key0)
+    );
+    return block;
+#endif /* notdef */
 }
 
 // --- EncInt Class ---
