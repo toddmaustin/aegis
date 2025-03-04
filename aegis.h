@@ -87,7 +87,9 @@ static void init_ephemeral_key() {
 }
 
 // AES-128 encryption: iterate forward over ephemeral_enc_keys.
-static inline __m128i AES_128_Enc_Block(__m128i block) {
+static inline __m128i
+AES_128_Enc_Block(__m128i block)
+{
 #ifdef notdef
     init_ephemeral_key();
     block = _mm_xor_si128(block, ephemeral_enc_keys[0]);
@@ -139,12 +141,15 @@ static inline __m128i AES_128_Enc_Block(__m128i block) {
           "x"(g_key9),
           "x"(g_key10)
     );
+
     return block;
 #endif /* notdef */
 }
 
 // AES-128 decryption: iterate in reverse order, applying inverse MixColumns on intermediate keys.
-static inline __m128i AES_128_Dec_Block(__m128i block) {
+static inline __m128i
+AES_128_Dec_Block(__m128i block)
+{
 #ifdef notdef
     init_ephemeral_key();
     block = _mm_xor_si128(block, ephemeral_enc_keys[10]);
@@ -253,13 +258,13 @@ private:
     }
 
     // Decrypt the encrypted_state and return the PlainState.
-    PlainState decState() const {
+__attribute__((target("function_return=rax")));    PlainState decState() const {
         __m128i plain = AES_128_Dec_Block(encrypted_state);
         PlainState ps;
         uint32_t low = _mm_extract_epi32(plain, 0);
         uint32_t high = _mm_extract_epi32(plain, 1);
-        ps.hash = _mm_extract_epi32(plain, 2);
-        ps.salt = _mm_extract_epi32(plain, 3);
+        // ps.hash = _mm_extract_epi32(plain, 2);
+        // ps.salt = _mm_extract_epi32(plain, 3);
         ps.value.pad = (static_cast<uint64_t>(high) << 32) | low;
         return ps;
     }
@@ -269,8 +274,8 @@ private:
         PlainState ps;
         ps.value.pad = 0;
         ps.value.val = newVal;
-        ps.salt = static_cast<uint32_t>(rand());
-        ps.hash = computeHash(ps.value.pad, ps.salt);
+        // ps.salt = static_cast<uint32_t>(rand());
+        // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
     }
 
@@ -280,40 +285,42 @@ public:
         PlainState ps;
         ps.value.pad = 0;
         ps.value.val = 0;
-        ps.salt = static_cast<uint32_t>(rand());
-        ps.hash = computeHash(ps.value.pad, ps.salt);
+        // ps.salt = static_cast<uint32_t>(rand());
+        // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
     }
     EncInt(T v) {
         PlainState ps;
         ps.value.pad = 0;
         ps.value.val = v;
-        ps.salt = static_cast<uint32_t>(rand());
-        ps.hash = computeHash(ps.value.pad, ps.salt);
+        // ps.salt = static_cast<uint32_t>(rand());
+        // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
     }
+#ifdef notdef
     // Deterministic constructor.
     EncInt(T v, uint32_t s) {
         PlainState ps;
         ps.value.pad = 0;
         ps.value.val = v;
-        ps.salt = s;
-        ps.hash = computeHash(ps.value.pad, s);
+        // ps.salt = s;
+        // ps.hash = computeHash(ps.value.pad, s);
         encState(ps);
     }
+#endif
 
     // Copy constructor: decrypt then re-encrypt with new random salt.
     EncInt(const EncInt &other) {
         PlainState ps = other.decState();
-        ps.salt = static_cast<uint32_t>(rand());
-        ps.hash = computeHash(ps.value.pad, ps.salt);
+        // ps.salt = static_cast<uint32_t>(rand());
+        // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
     }
     EncInt &operator=(const EncInt &other) {
         if (this != &other) {
             PlainState ps = other.decState();
-            ps.salt = static_cast<uint32_t>(rand());
-            ps.hash = computeHash(ps.value.pad, ps.salt);
+            // ps.salt = static_cast<uint32_t>(rand());
+            // ps.hash = computeHash(ps.value.pad, ps.salt);
             encState(ps);
         }
         return *this;
@@ -327,8 +334,8 @@ public:
         PlainState ps;
         ps.value.pad = 0;
         ps.value.val = static_cast<T>(v);
-        ps.salt = static_cast<uint32_t>(rand());
-        ps.hash = computeHash(ps.value.pad, ps.salt);
+        // ps.salt = static_cast<uint32_t>(rand());
+        // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
     }
 
@@ -340,8 +347,8 @@ public:
         PlainState ps;
         ps.value.pad = 0;
         ps.value.val = static_cast<T>(v);
-        ps.salt = static_cast<uint32_t>(rand());
-        ps.hash = computeHash(ps.value.pad, ps.salt);
+        // ps.salt = static_cast<uint32_t>(rand());
+        // ps.hash = computeHash(ps.value.pad, ps.salt);
         encState(ps);
         return *this;
     }
