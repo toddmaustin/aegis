@@ -37,7 +37,9 @@ static bool ephemeral_key_initialized = false;
     _mm_xor_si128(_key, _temp);                                      \
 })
 
-static void init_ephemeral_key() {
+static void
+init_ephemeral_key(void)
+{
     if (!ephemeral_key_initialized) {
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -93,8 +95,6 @@ static void init_ephemeral_key() {
 static inline __m128i
 AES_128_Enc_Block(uint64_t value)
 {
-  init_ephemeral_key();
-
   register __m128i block asm("xmm0")
      = _mm_set_epi32(/* hash */42, /* salt */0,
                      static_cast<int>(value >> 32),
@@ -148,17 +148,6 @@ AES_128_Enc_Block(uint64_t value)
 static inline __m128i
 AES_128_Dec_Block(__m128i block)
 {
-#ifdef notdef
-    init_ephemeral_key();
-    block = _mm_xor_si128(block, ephemeral_enc_keys[10]);
-    for (int i = 9; i >= 1; i--) {
-        block = _mm_aesdec_si128(block, _mm_aesimc_si128(ephemeral_enc_keys[i]));
-    }
-    block = _mm_aesdeclast_si128(block, ephemeral_enc_keys[0]);
-    return block;
-#else /* !notdef */
-    init_ephemeral_key();
-
     // Global register variables for keys 0-9.
     // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
     register __m128i g_temp  asm("xmm4");
@@ -209,7 +198,6 @@ AES_128_Dec_Block(__m128i block)
           "x"(g_key0)
     );
     return block;
-#endif /* notdef */
 }
 
 // --- EncInt Class ---
@@ -418,6 +406,14 @@ using enc_uint64_t = EncInt_t<uint64_t>;
 #endif
 
 } // namespace aegis
+
+// Static function with constructor attribute
+static void __attribute__((constructor)) load_time_init()
+{
+    std::cout << "Initialization routine running..." << std::endl;
+    // call crypto library initialization function
+    aegis::init_ephemeral_key();
+}
 
 #endif // AEGIS_H
 
