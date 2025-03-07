@@ -40,6 +40,21 @@ static __m128i ephemeral_enc_keys[11];
 static __m128i ephemeral_key;
 static bool ephemeral_key_initialized = false;
 
+// Global register variables for keys 0-9.
+// These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
+volatile register __m128i g_temp  asm("xmm4");
+volatile register __m128i g_key0  asm("xmm5");
+volatile register __m128i g_key1  asm("xmm6");
+volatile register __m128i g_key2  asm("xmm7");
+volatile register __m128i g_key3  asm("xmm8");
+volatile register __m128i g_key4  asm("xmm9");
+volatile register __m128i g_key5  asm("xmm10");
+volatile register __m128i g_key6  asm("xmm11");
+volatile register __m128i g_key7  asm("xmm12");
+volatile register __m128i g_key8  asm("xmm13");
+volatile register __m128i g_key9  asm("xmm14");
+volatile register __m128i g_key10 asm("xmm15");
+
 // Macro for AES-128 key expansion step. RC must be an immediate constant.
 #define AES128_KEY_EXPANSION_STEP(KEY, RC) ({                      \
     __m128i _key = (KEY);                                          \
@@ -61,11 +76,11 @@ init_ephemeral_key(void)
         int success;
         long long unsigned rdrand_value;
         while (!(success =  _my_rdrand64_step(&rdrand_value)));
-        printf("rdrand_value = 0x%lx\n", (uint64_t)rdrand_value);
+        // printf("rdrand_value = 0x%lx\n", (uint64_t)rdrand_value);
         std::mt19937 gen((uint64_t)rdrand_value);
         std::uniform_int_distribution<uint32_t> dis;
         uint32_t randomParts[4] = { dis(gen), dis(gen), dis(gen), dis(gen) };
-        printf("randomParts[] = { %08x, %08x, %08x, %08x }\n", randomParts[3], randomParts[2], randomParts[1], randomParts[0]);
+        // printf("randomParts[] = { %08x, %08x, %08x, %08x }\n", randomParts[3], randomParts[2], randomParts[1], randomParts[0]);
         ephemeral_key = _mm_set_epi32(randomParts[3], randomParts[2], randomParts[1], randomParts[0]);
 
         ephemeral_enc_keys[0] = ephemeral_key;
@@ -80,21 +95,6 @@ init_ephemeral_key(void)
         ephemeral_enc_keys[9] = AES128_KEY_EXPANSION_STEP(ephemeral_enc_keys[8], 0x1B);
         ephemeral_enc_keys[10] = AES128_KEY_EXPANSION_STEP(ephemeral_enc_keys[9], 0x36);
 
-        // Global register variables for keys 0-9.
-        // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
-        // volatile register __m128i g_temp  asm("xmm4");
-        volatile register __m128i g_key0  asm("xmm5");
-        volatile register __m128i g_key1  asm("xmm6");
-        volatile register __m128i g_key2  asm("xmm7");
-        volatile register __m128i g_key3  asm("xmm8");
-        volatile register __m128i g_key4  asm("xmm9");
-        volatile register __m128i g_key5  asm("xmm10");
-        volatile register __m128i g_key6  asm("xmm11");
-        volatile register __m128i g_key7  asm("xmm12");
-        volatile register __m128i g_key8  asm("xmm13");
-        volatile register __m128i g_key9  asm("xmm14");
-        volatile register __m128i g_key10 asm("xmm15");
-
         // Bind the first 10 keys to XMM registers.
         g_key0 = ephemeral_enc_keys[0];
         g_key1 = ephemeral_enc_keys[1];
@@ -108,7 +108,11 @@ init_ephemeral_key(void)
         g_key9 = ephemeral_enc_keys[9];
         g_key10 = ephemeral_enc_keys[10];
 
+#if 0
+        for (unsigned i=0; i <= 10; i++)
+          print_m128i("key[]", ephemeral_enc_keys[i]);
         ephemeral_key_initialized = true;
+#endif
     }
 }
 
@@ -124,21 +128,6 @@ AES_128_Enc_Block(/* value_arg */)
      = _mm_set_epi32(/* hash */42, salt++,
                      static_cast<int>(value_arg >> 32),
                      static_cast<int>(value_arg & 0xffffffff));
-
-  // Global register variables for keys 0-9.
-  // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
-  // volatile register __m128i g_temp  asm("xmm4");
-  volatile register __m128i g_key0  asm("xmm5");
-  volatile register __m128i g_key1  asm("xmm6");
-  volatile register __m128i g_key2  asm("xmm7");
-  volatile register __m128i g_key3  asm("xmm8");
-  volatile register __m128i g_key4  asm("xmm9");
-  volatile register __m128i g_key5  asm("xmm10");
-  volatile register __m128i g_key6  asm("xmm11");
-  volatile register __m128i g_key7  asm("xmm12");
-  volatile register __m128i g_key8  asm("xmm13");
-  volatile register __m128i g_key9  asm("xmm14");
-  volatile register __m128i g_key10 asm("xmm15");
 
   __asm__ volatile (
       "pxor   %1, %0            \n\t"  // block ^= g_key0
@@ -172,21 +161,6 @@ AES_128_Enc_Block(/* value_arg */)
 static /*inline*/ /* __m128i */ void
 AES_128_Dec_Block(__m128i block)
 {
-    // Global register variables for keys 0-9.
-    // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
-    register __m128i g_temp  asm("xmm4");
-    register __m128i g_key0  asm("xmm5");
-    register __m128i g_key1  asm("xmm6");
-    register __m128i g_key2  asm("xmm7");
-    register __m128i g_key3  asm("xmm8");
-    register __m128i g_key4  asm("xmm9");
-    register __m128i g_key5  asm("xmm10");
-    register __m128i g_key6  asm("xmm11");
-    register __m128i g_key7  asm("xmm12");
-    register __m128i g_key8  asm("xmm13");
-    register __m128i g_key9  asm("xmm14");
-    register __m128i g_key10 asm("xmm15");
-
     __asm__ volatile (
         "pxor   %1, %0            \n\t"  // block ^= ephemeral_enc_keys[10]
         "aesimc %2, %3            \n\t"
@@ -456,7 +430,7 @@ using enc_uint64_t = EncInt_t<uint64_t>;
 // Static function with constructor attribute
 static void __attribute__((constructor)) load_time_init()
 {
-    std::cout << "Initialization routine running..." << std::endl;
+    // std::cout << "Initialization routine running..." << std::endl;
     // call crypto library initialization function
     aegis::init_ephemeral_key();
 }
