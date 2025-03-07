@@ -10,10 +10,24 @@
 #include <emmintrin.h>
 #include <smmintrin.h>
 #include <tmmintrin.h>
+#include <immintrin.h>  // Required for _rdseed32_step and _rdseed64_step
 #include <type_traits>
 
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
+
+void
+print_m128i(const char *varname, __m128i value)
+{
+    uint8_t bytes[16];
+    _mm_storeu_si128(reinterpret_cast<__m128i*>(bytes), value);
+
+    printf("%s: ", varname);
+    for (int i = 0; i < 16; i++) {
+        printf("%02x", bytes[i]);  // Print as hexadecimal
+    }
+    printf("\n");
+}
 
 namespace aegis {
 
@@ -37,14 +51,21 @@ static bool ephemeral_key_initialized = false;
     _mm_xor_si128(_key, _temp);                                      \
 })
 
+#define _my_rdrand64_step(x) ({ unsigned char err; asm volatile(".byte 0x48; .byte 0x0f; .byte 0xc7; .byte 0xf0; setc %1":"=a"(*x), "=qm"(err)); err; })
+
+
 static void
 init_ephemeral_key(void)
 {
     if (!ephemeral_key_initialized) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
+        int success;
+        long long unsigned rdrand_value;
+        while (!(success =  _my_rdrand64_step(&rdrand_value)));
+        printf("rdrand_value = 0x%lx\n", (uint64_t)rdrand_value);
+        std::mt19937 gen((uint64_t)rdrand_value);
         std::uniform_int_distribution<uint32_t> dis;
         uint32_t randomParts[4] = { dis(gen), dis(gen), dis(gen), dis(gen) };
+        printf("randomParts[] = { %08x, %08x, %08x, %08x }\n", randomParts[3], randomParts[2], randomParts[1], randomParts[0]);
         ephemeral_key = _mm_set_epi32(randomParts[3], randomParts[2], randomParts[1], randomParts[0]);
 
         ephemeral_enc_keys[0] = ephemeral_key;
@@ -92,14 +113,17 @@ init_ephemeral_key(void)
 }
 
 // AES-128 encryption: iterate forward over ephemeral_enc_keys.
-static inline __m128i
-AES_128_Enc_Block(uint64_t value)
+uint32_t salt = 0;
+register uint64_t value_arg asm("ebx");
+static /*inline*/ __m128i
+AES_128_Enc_Block(/* value_arg */)
 {
+  // __asm__ volatile (
+  //    "movd %%xmm0, %0" : "=r"(salt));  // Move lower 32 bits of xmm0 into result
   register __m128i block asm("xmm0")
-     = _mm_set_epi32(/* hash */42, /* salt */0,
-                     static_cast<int>(value >> 32),
-                     static_cast<int>(value & 0xffffffff));
-
+     = _mm_set_epi32(/* hash */42, salt++,
+                     static_cast<int>(value_arg >> 32),
+                     static_cast<int>(value_arg & 0xffffffff));
 
   // Global register variables for keys 0-9.
   // These are bound to XMM registers xmm0 through xmm9 and will persist throughout execution.
@@ -145,7 +169,7 @@ AES_128_Enc_Block(uint64_t value)
 }
 
 // AES-128 decryption: iterate in reverse order, applying inverse MixColumns on intermediate keys.
-static inline __m128i
+static /*inline*/ /* __m128i */ void
 AES_128_Dec_Block(__m128i block)
 {
     // Global register variables for keys 0-9.
@@ -197,7 +221,10 @@ AES_128_Dec_Block(__m128i block)
           "x"(g_key1), "x"(g_temp),
           "x"(g_key0)
     );
-    return block;
+
+    uint32_t low = _mm_extract_epi32(block, 0);
+    uint32_t high = _mm_extract_epi32(block, 1);
+    value_arg = (static_cast<uint64_t>(high) << 32) | low;
 }
 
 // --- EncInt Class ---
@@ -207,6 +234,10 @@ AES_128_Dec_Block(__m128i block)
 // is packed into a 128-bit block and encrypted using AES-128. Every operation (construction, assignment,
 // cast, arithmetic, etc.) generates a new random salt.
 class EncInt {
+public: /* FIXME: */
+    // The encrypted state stored as a 128-bit block.
+    __m128i encrypted_state;
+
 private:
     // PlainState embeds a union directly.
     struct PlainState {
@@ -215,9 +246,7 @@ private:
         uint32_t hash;
     };
 
-    // The encrypted state stored as a 128-bit block.
-    __m128i encrypted_state;
-
+#if 0
     // Compute a 32-bit hash from the padded value and salt.
     static uint32_t computeHash(uint64_t paddedVal, uint32_t salt) {
         uint64_t combined = paddedVal ^ salt;
@@ -228,7 +257,9 @@ private:
         combined ^= combined >> 33;
         return static_cast<uint32_t>(combined);
     }
+#endif
 
+#if 0
     // Decrypt the encrypted_state and return the PlainState.
     PlainState decState() const {
         __m128i plain = AES_128_Dec_Block(encrypted_state);
@@ -240,57 +271,49 @@ private:
         ps.value = (static_cast<uint64_t>(high) << 32) | low;
         return ps;
     }
+#endif
 
     // Update the state with a new value: generate new salt and compute new hash.
     void updState(uint64_t newVal) {
         // ps.salt = static_cast<uint32_t>(rand());
         // ps.hash = computeHash(ps.value.pad, ps.salt);
-        encrypted_state = AES_128_Enc_Block(newVal);
+        value_arg = newVal;
+        encrypted_state = AES_128_Enc_Block();
     }
 
 public:
     // Constructors.
     EncInt() {
-        // ps.salt = static_cast<uint32_t>(rand());
-        // ps.hash = computeHash(ps.value.pad, ps.salt);
-        encrypted_state = AES_128_Enc_Block(0);
+        value_arg = 0;
+        encrypted_state = AES_128_Enc_Block();
     }
     EncInt(uint64_t v) {
-        // ps.salt = static_cast<uint32_t>(rand());
-        // ps.hash = computeHash(ps.value.pad, ps.salt);
-        encrypted_state = AES_128_Enc_Block(v);
+        value_arg = v;
+        encrypted_state = AES_128_Enc_Block();
     }
     EncInt(__m128i c) {
-        // PlainState ps;
-        // ps.value = v;
-        // ps.salt = static_cast<uint32_t>(rand());
-        // ps.hash = computeHash(ps.value.pad, ps.salt);
         encrypted_state = c;
     }
-#ifdef notdef
+#if 0
     // Deterministic constructor.
     EncInt(T v, uint32_t s) {
         PlainState ps;
         ps.value = v;
-        // ps.salt = s;
-        // ps.hash = computeHash(ps.value.pad, s);
         encrypted_state = AES_128_Enc_Block(ps.value);
     }
 #endif
 
     // Copy constructor: decrypt then re-encrypt with new random salt.
     EncInt(const EncInt &other) {
-        PlainState ps = other.decState();
-        // ps.salt = static_cast<uint32_t>(rand());
-        // ps.hash = computeHash(ps.value.pad, ps.salt);
-        encrypted_state = AES_128_Enc_Block(ps.value);
+        AES_128_Dec_Block(other.encrypted_state);
+        /* value_arg passes through */
+        encrypted_state = AES_128_Enc_Block();
     }
     EncInt &operator=(const EncInt &other) {
         if (this != &other) {
-            PlainState ps = other.decState();
-            // ps.salt = static_cast<uint32_t>(rand());
-            // ps.hash = computeHash(ps.value.pad, ps.salt);
-            encrypted_state = AES_128_Enc_Block(ps.value);
+            AES_128_Dec_Block(other.encrypted_state);
+            /* value_arg passes through */
+            encrypted_state = AES_128_Enc_Block();
         }
         return *this;
     }
@@ -326,53 +349,74 @@ public:
 
     // Getters.
     uint64_t getValue() {
-        PlainState ps = decState();
-        return ps.value;
+        AES_128_Dec_Block(encrypted_state);
+        return value_arg;
     }
+#if 0
     uint32_t getSalt() {
         return decState().salt;
     }
     uint32_t getHash() {
         return decState().hash;
     }
+#endif
 
     // Arithmetic operators.
     EncInt operator+(const EncInt &other) const {
-        PlainState ps1 = decState();
-        PlainState ps2 = other.decState();
-        __m128i encrypted_state = AES_128_Enc_Block(ps1.value + ps2.value);
+        
+        AES_128_Dec_Block(encrypted_state);
+        uint64_t op1 = value_arg;
+        AES_128_Dec_Block(other.encrypted_state);
+        uint64_t op2 = value_arg;
+        value_arg = op1 + op2;
+        __m128i encrypted_state = AES_128_Enc_Block();
         return EncInt(encrypted_state);
     }
     EncInt operator-(const EncInt &other) const {
-        PlainState ps1 = decState();
-        PlainState ps2 = other.decState();
-        __m128i encrypted_state = AES_128_Enc_Block(ps1.value - ps2.value);
+        AES_128_Dec_Block(encrypted_state);
+        uint64_t op1 = value_arg;
+        AES_128_Dec_Block(other.encrypted_state);
+        uint64_t op2 = value_arg;
+        value_arg = op1 - op2;
+        __m128i encrypted_state = AES_128_Enc_Block();
         return EncInt(encrypted_state);
     }
     EncInt operator*(const EncInt &other) const {
-        PlainState ps1 = decState();
-        PlainState ps2 = other.decState();
-        __m128i encrypted_state = AES_128_Enc_Block(ps1.value * ps2.value);
+        AES_128_Dec_Block(encrypted_state);
+        uint64_t op1 = value_arg;
+        AES_128_Dec_Block(other.encrypted_state);
+        uint64_t op2 = value_arg;
+        value_arg = op1 * op2;
+        __m128i encrypted_state = AES_128_Enc_Block();
         return EncInt(encrypted_state);
     }
     EncInt operator/(const EncInt &other) const {
-        PlainState ps1 = decState();
-        PlainState ps2 = other.decState();
-        __m128i encrypted_state = AES_128_Enc_Block(ps1.value / ps2.value);
+        AES_128_Dec_Block(encrypted_state);
+        uint64_t op1 = value_arg;
+        AES_128_Dec_Block(other.encrypted_state);
+        uint64_t op2 = value_arg;
+        value_arg = op1 / op2;
+        __m128i encrypted_state = AES_128_Enc_Block();
         return EncInt(encrypted_state);
     }
     EncInt operator%(const EncInt &other) const {
-        PlainState ps1 = decState();
-        PlainState ps2 = other.decState();
-        __m128i encrypted_state = AES_128_Enc_Block(ps1.value % ps2.value);
+        AES_128_Dec_Block(encrypted_state);
+        uint64_t op1 = value_arg;
+        AES_128_Dec_Block(other.encrypted_state);
+        uint64_t op2 = value_arg;
+        value_arg = op1 % op2;
+        __m128i encrypted_state = AES_128_Enc_Block();
         return EncInt(encrypted_state);
     }
 
     // Compound assignment operator example.
     EncInt &operator+=(const EncInt &other) {
-        PlainState ps1 = decState();
-        PlainState ps2 = other.decState();
-        encrypted_state = AES_128_Enc_Block(ps1.value + ps2.value);
+        AES_128_Dec_Block(encrypted_state);
+        uint64_t op1 = value_arg;
+        AES_128_Dec_Block(other.encrypted_state);
+        uint64_t op2 = value_arg;
+        value_arg = op1 + op2;
+        encrypted_state = AES_128_Enc_Block();
         return *this;
     }
 
@@ -381,12 +425,14 @@ public:
         return getValue();
     }
 
+#if 0
     // For demonstration: friend operator<<.
     friend std::ostream &operator<<(std::ostream &os, const EncInt &ei) {
         PlainState ps = ei.decState();
         os << ps.value;
         return os;
     }
+#endif
 };
 
 #if 0

@@ -126,6 +126,9 @@ int main() {
 
     std::cout << "Testing type: " << "uint64_t" << "\n";
 
+  for (unsigned iter=0; iter < 10000; iter++)
+  {
+
     uint64_t a_val, b_val, mult_val;
 
     // For 16, 32, 64-bit types we can use slightly larger values.
@@ -138,46 +141,57 @@ int main() {
     // Default constructor.
     EncInt a;
     assert(a.getValue() == 0);
+    print_m128i("a", a.encrypted_state);
 
     // Value constructor.
     EncInt b(a_val);
     assert(b.getValue() == a_val);
+    print_m128i("b", b.encrypted_state);
 
     // Deterministic constructor.
     // uint32_t fixedSalt = 12345;
     // EncT c(a_val * 2, fixedSalt);
     EncInt c(a_val * 2);
     assert(c.getValue() == a_val * 2);
+    print_m128i("c", c.encrypted_state);
     // assert(c.getSalt() == fixedSalt);
 
     // Copy constructor.
     EncInt d = b;
     assert(d.getValue() == b.getValue());
+    print_m128i("d", d.encrypted_state);
     // The salt should differ.
     // FIXME: assert(d.getSalt() != b.getSalt());
 
     // Arithmetic operators.
     EncInt e = b + c;  // a_val + 2*a_val = 3*a_val.
     assert(e.getValue() == a_val + a_val * 2);
+    print_m128i("e", e.encrypted_state);
 
     EncInt f = c - b;  // 2*a_val - a_val = a_val.
     assert(f.getValue() == a_val);
+    print_m128i("f", f.encrypted_state);
 
     EncInt g = b * c;  // a_val * (2*a_val)
     assert(g.getValue() == a_val * (2 * a_val));
+    print_m128i("g", g.encrypted_state);
 
     // Avoid division by zero.
     if (b.getValue() != 0) {
         EncInt h = c / b;  // (2*a_val) / a_val = 2
         assert(h.getValue() == 2);
+        print_m128i("h", h.encrypted_state);
+ 
         EncInt i = c % b;  // (2*a_val) % a_val = 0
         assert(i.getValue() == 0);
+        print_m128i("i", i.encrypted_state);
     }
 
     // Compound assignment.
     EncInt j(mult_val);
     j += b; // mult_val + a_val
     assert(j.getValue() == mult_val + a_val);
+    print_m128i("j", j.encrypted_state);
 
 #ifdef notdef
     // Templated conversion: test conversion from a larger type to this type.
@@ -200,6 +214,7 @@ int main() {
     ss >> printedVal;
     assert(printedVal == b.getValue());
 #endif
+  }
 
     std::cout << "  All tests passed for " << "uint64_t" << ".\n";
 

@@ -1,5 +1,5 @@
 CXX      = g++
-CXXFLAGS = -std=c++17 -g -Wall -Wextra -O0 -maes -msse4.1 -Wno-unused-but-set-variable -Wno-volatile-register-var
+CXXFLAGS = -std=c++17 -g -Wall -Wextra -O3 -maes -msse4.1 -Wno-unused-but-set-variable -Wno-volatile-register-var -Wno-register
 TARGET   = test_aegis
 SOURCES  = test_aegis.cpp
 
