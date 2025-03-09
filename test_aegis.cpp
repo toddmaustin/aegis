@@ -145,6 +145,10 @@ int main()
     assert(a.getValue() == 0);
     print_m128i("a", a.encrypted_state);
 
+    // Default constructor.
+    EncInt aprime;
+    print_m128i("aprime", aprime.encrypted_state);
+
     // Value constructor.
     EncInt b(a_val);
     assert(b.getValue() == a_val);
