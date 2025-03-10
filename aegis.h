@@ -125,7 +125,7 @@ init_ephemeral_key(void)
 }
 
 // AES-128 encryption: iterate forward over ephemeral_enc_keys.
-register uint64_t value_arg asm("ebx");
+register uint64_t value_arg asm("rbx");
 static /*inline*/ __m128i
 AES_128_Enc_Block(/* value_arg */)
 {
@@ -160,6 +160,7 @@ AES_128_Enc_Block(/* value_arg */)
 }
 
 // AES-128 decryption: iterate in reverse order, applying inverse MixColumns on intermediate keys.
+register uint64_t auth_arg asm("rcx");
 static /*inline*/ /* __m128i */ void
 AES_128_Dec_Block(__m128i block)
 {
@@ -196,7 +197,8 @@ AES_128_Dec_Block(__m128i block)
     __asm__ volatile (
        "movd %xmm0, %ebx     \n\t" // Move lowest 32-bit lane into EBX
        "cmpq $0x2a, %rbx     \n\t" // Compare with 42
-       "jne __authfail       \n\t" // Jump if equal
+       "sete %cl            \n\t" // Set CL to 1 if not equal, 0 if equal
+       "movzx %cl, %rcx      \n\t" // Zero-extend CL into ECX
    );
 
     uint32_t low = _mm_extract_epi32(block, 2);
@@ -282,15 +284,23 @@ public:
 
     // Copy constructor: decrypt then re-encrypt with new random salt.
     EncInt(const EncInt &other) {
+        bool auth = true;
         AES_128_Dec_Block(other.encrypted_state);
+        auth = auth && auth_arg;
         /* value_arg passes through */
         encrypted_state = AES_128_Enc_Block();
+        if (!auth)
+          printf("Authentication failure...\n");
     }
     EncInt &operator=(const EncInt &other) {
         if (this != &other) {
+            bool auth = true;
             AES_128_Dec_Block(other.encrypted_state);
+            auth = auth && auth_arg;
             /* value_arg passes through */
             encrypted_state = AES_128_Enc_Block();
+            if (!auth)
+              printf("Authentication failure...\n");
         }
         return *this;
     }
@@ -326,7 +336,11 @@ public:
 
     // Getters.
     uint64_t getValue() {
+        bool auth = true;
         AES_128_Dec_Block(encrypted_state);
+        auth = auth && auth_arg;
+        if (!auth)
+          printf("Authentication failure...\n");
         return value_arg;
     }
 #if 0
@@ -340,60 +354,89 @@ public:
 
     // Arithmetic operators.
     EncInt operator+(const EncInt &other) const {
-        
+        bool auth = true;
         AES_128_Dec_Block(encrypted_state);
         uint64_t op1 = value_arg;
+        auth = auth && auth_arg;
         AES_128_Dec_Block(other.encrypted_state);
         uint64_t op2 = value_arg;
+        auth = auth && auth_arg;
         value_arg = op1 + op2;
         __m128i encrypted_state = AES_128_Enc_Block();
+        if (!auth)
+          printf("Authentication failure...\n");
         return EncInt(encrypted_state);
     }
     EncInt operator-(const EncInt &other) const {
+        bool auth = true;
         AES_128_Dec_Block(encrypted_state);
         uint64_t op1 = value_arg;
+        auth = auth && auth_arg;
         AES_128_Dec_Block(other.encrypted_state);
         uint64_t op2 = value_arg;
+        auth = auth && auth_arg;
         value_arg = op1 - op2;
         __m128i encrypted_state = AES_128_Enc_Block();
+        if (!auth)
+          printf("Authentication failure...\n");
         return EncInt(encrypted_state);
     }
     EncInt operator*(const EncInt &other) const {
+        bool auth = true;
         AES_128_Dec_Block(encrypted_state);
         uint64_t op1 = value_arg;
+        auth = auth && auth_arg;
         AES_128_Dec_Block(other.encrypted_state);
         uint64_t op2 = value_arg;
         value_arg = op1 * op2;
+        auth = auth && auth_arg;
         __m128i encrypted_state = AES_128_Enc_Block();
+        if (!auth)
+          printf("Authentication failure...\n");
         return EncInt(encrypted_state);
     }
     EncInt operator/(const EncInt &other) const {
+        bool auth = true;
         AES_128_Dec_Block(encrypted_state);
         uint64_t op1 = value_arg;
+        auth = auth && auth_arg;
         AES_128_Dec_Block(other.encrypted_state);
         uint64_t op2 = value_arg;
+        auth = auth && auth_arg;
         value_arg = op1 / op2;
         __m128i encrypted_state = AES_128_Enc_Block();
+        if (!auth)
+          printf("Authentication failure...\n");
         return EncInt(encrypted_state);
     }
     EncInt operator%(const EncInt &other) const {
+        bool auth = true;
         AES_128_Dec_Block(encrypted_state);
         uint64_t op1 = value_arg;
+        auth = auth && auth_arg;
         AES_128_Dec_Block(other.encrypted_state);
         uint64_t op2 = value_arg;
+        auth = auth && auth_arg;
         value_arg = op1 % op2;
         __m128i encrypted_state = AES_128_Enc_Block();
+        if (!auth)
+          printf("Authentication failure...\n");
         return EncInt(encrypted_state);
     }
 
     // Compound assignment operator example.
     EncInt &operator+=(const EncInt &other) {
+        bool auth = true;
         AES_128_Dec_Block(encrypted_state);
         uint64_t op1 = value_arg;
+        auth = auth && auth_arg;
         AES_128_Dec_Block(other.encrypted_state);
         uint64_t op2 = value_arg;
+        auth = auth && auth_arg;
         value_arg = op1 + op2;
         encrypted_state = AES_128_Enc_Block();
+        if (!auth)
+          printf("Authentication failure...\n");
         return *this;
     }
 
