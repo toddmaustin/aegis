@@ -109,11 +109,11 @@ init_ephemeral_key(void)
         g_key10 = ephemeral_enc_keys[10];
 
         // xmm14 is the incrementing salt value
-        __m128i salt_value = _mm_set_epi32(0, dis(gen), 0, 0);
+        __m128i salt_value = _mm_set_epi32(0, 0, dis(gen), 0);
         g_key9 = salt_value;
 
         // xmm13 is the incrementor value
-        __m128i salt_increment = _mm_set_epi32(0, 1, 0, 0);
+        __m128i salt_increment = _mm_set_epi32(0, 0, 1, 0);
         g_key8 = salt_increment;
 
 #if 0
@@ -131,14 +131,14 @@ AES_128_Enc_Block(/* value_arg */)
 {
   // build the plaintext 128-bit word
   register __m128i block asm("xmm0")
-     = _mm_set_epi32(/* hash */42, 0,
-                     static_cast<int>(value_arg >> 32),
-                     static_cast<int>(value_arg & 0xffffffff));
+     = _mm_set_epi32(static_cast<int>(value_arg >> 32),
+                     static_cast<int>(value_arg & 0xffffffff),
+                     0, /* hash */42);
 
   // mix in the salt value
   __asm__ volatile (
-     "paddd   %xmm13, %xmm14  \n\t" // salt = salt + 1
-     "paddd   %xmm14, %xmm0    \n\t" // mix in the salt
+     "paddd   %xmm13, %xmm14    \n\t" // salt = salt + 1
+     "paddd   %xmm14, %xmm0     \n\t" // mix in the salt
   );
 
   __asm__ volatile (
@@ -192,8 +192,15 @@ AES_128_Dec_Block(__m128i block)
         : "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15"
     );
 
-    uint32_t low = _mm_extract_epi32(block, 0);
-    uint32_t high = _mm_extract_epi32(block, 1);
+    // check the authentication "cookie"
+    __asm__ volatile (
+       "movd %xmm0, %ebx     \n\t" // Move lowest 32-bit lane into EBX
+       "cmpq $0x2a, %rbx     \n\t" // Compare with 42
+       "jne __authfail       \n\t" // Jump if equal
+   );
+
+    uint32_t low = _mm_extract_epi32(block, 2);
+    uint32_t high = _mm_extract_epi32(block, 3);
     value_arg = (static_cast<uint64_t>(high) << 32) | low;
 }
 
@@ -429,6 +436,11 @@ static void __attribute__((constructor)) load_time_init()
     // std::cout << "Initialization routine running..." << std::endl;
     // call crypto library initialization function
     aegis::init_ephemeral_key();
+}
+
+extern "C" __attribute__((naked)) void __authfail() {
+  printf("Authentication failure...\n");
+  return;
 }
 
 #endif // AEGIS_H

@@ -196,6 +196,7 @@ int main()
     // Compound assignment.
     EncInt j(mult_val);
     j += b; // mult_val + a_val
+    // BIT ERROR: *(((uint8_t *)&(j.encrypted_state))) ^= 1;
     assert(j.getValue() == mult_val + a_val);
     // print_m128i("j", j.encrypted_state);
 
