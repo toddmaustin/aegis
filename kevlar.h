@@ -1,5 +1,5 @@
-#ifndef AEGIS_H
-#define AEGIS_H
+#ifndef KEVLAR_H
+#define KEVLAR_H
 
 #include <cstdint>
 #include <cassert>
@@ -29,7 +29,7 @@ print_m128i(const char *varname, __m128i value)
     printf("\n");
 }
 
-namespace aegis {
+namespace kevlar {
 
 // --- Global Ephemeral Key and Key Schedule ---
 //
@@ -69,7 +69,7 @@ volatile register __m128i g_key10 asm("xmm15");
 #define _my_rdrand64_step(x) ({ unsigned char err; asm volatile(".byte 0x48; .byte 0x0f; .byte 0xc7; .byte 0xf0; setc %1":"=a"(*x), "=qm"(err)); err; })
 
 
-static void
+extern "C" void
 init_ephemeral_key(void)
 {
     if (!ephemeral_key_initialized) {
@@ -124,9 +124,14 @@ init_ephemeral_key(void)
     }
 }
 
-// AES-128 encryption: iterate forward over ephemeral_enc_keys.
 register uint64_t value_arg asm("rbx");
-static /*inline*/ __m128i
+register uint64_t auth_arg asm("rcx");
+extern "C" /*inline*/ __m128i AES_128_Enc_Block(/* value_arg */);
+extern "C" /*inline*/ /* __m128i */ void AES_128_Dec_Block(__m128i block);
+
+// AES-128 encryption: iterate forward over ephemeral_enc_keys.
+// register uint64_t value_arg asm("rbx");
+extern "C" /*inline*/ __m128i
 AES_128_Enc_Block(/* value_arg */)
 {
   // build the plaintext 128-bit word
@@ -160,8 +165,8 @@ AES_128_Enc_Block(/* value_arg */)
 }
 
 // AES-128 decryption: iterate in reverse order, applying inverse MixColumns on intermediate keys.
-register uint64_t auth_arg asm("rcx");
-static /*inline*/ /* __m128i */ void
+// register uint64_t auth_arg asm("rcx");
+extern "C" /*inline*/ /* __m128i */ void
 AES_128_Dec_Block(__m128i block)
 {
     __asm__ volatile (
@@ -471,20 +476,22 @@ using enc_int64_t  = EncInt_t<int64_t>;
 using enc_uint64_t = EncInt_t<uint64_t>;
 #endif
 
-} // namespace aegis
+} // namespace kevlar
 
 // Static function with constructor attribute
 static void __attribute__((constructor)) load_time_init()
 {
     // std::cout << "Initialization routine running..." << std::endl;
     // call crypto library initialization function
-    aegis::init_ephemeral_key();
+    kevlar::init_ephemeral_key();
 }
 
+#if 0
 extern "C" __attribute__((naked)) void __authfail() {
   printf("Authentication failure...\n");
   return;
 }
+#endif
 
-#endif // AEGIS_H
+#endif // KEVLAR_H
 

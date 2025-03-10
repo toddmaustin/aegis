@@ -1,12 +1,12 @@
 #define UNIT_TEST_AEGIS
-#include "aegis.h"
+#include "kevlar.h"
 #include <iostream>
 #include <sstream>
 #include <cassert>
 #include <limits>
 #include <type_traits>
 
-using namespace aegis;
+using namespace kevlar;
 
 #if 0
 // A helper function template to choose "safe" test values that won't overflow.
